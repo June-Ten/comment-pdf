@@ -39,6 +39,37 @@ export function pdfRectToViewport(rect, viewport) {
   }
 }
 
+function sameLine(a, b) {
+  const overlap = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y)
+  return overlap > Math.min(a.height, b.height) * 0.5
+}
+
+export function alignLineRects(rects) {
+  const lines = []
+  for (const rect of [...rects].sort((a, b) => a.y - b.y || a.x - b.x)) {
+    const line = lines.find((group) => group.some((other) => sameLine(rect, other)))
+    if (line) line.push(rect)
+    else lines.push([rect])
+  }
+
+  return lines.flatMap((line) => {
+    const bottom = Math.min(...line.map((rect) => rect.y))
+    const top = Math.max(...line.map((rect) => rect.y + rect.height))
+    const height = top - bottom
+    const merged = []
+    for (const rect of [...line].sort((a, b) => a.x - b.x)) {
+      const last = merged.at(-1)
+      const gap = last ? rect.x - (last.x + last.width) : Infinity
+      if (last && gap <= Math.max(1.5, height * 0.6)) {
+        last.width = Math.max(last.x + last.width, rect.x + rect.width) - last.x
+      } else {
+        merged.push({ x: rect.x, y: bottom, width: rect.width, height })
+      }
+    }
+    return merged
+  })
+}
+
 function dedupeRects(rects) {
   const kept = []
   for (const rect of rects) {
@@ -104,7 +135,7 @@ export function captureSelection(root, viewportFor) {
 
   const anchors = [...groups.entries()]
     .sort((a, b) => a[0] - b[0])
-    .map(([page, rects]) => ({ page, rects: dedupeRects(rects) }))
+    .map(([page, rects]) => ({ page, rects: alignLineRects(dedupeRects(rects)) }))
   const firstPage = root.querySelector(`[data-page="${anchors[0].page}"]`)
   const { prefix, suffix } = contextFromRange(range, firstPage?.querySelector('.textLayer'))
 

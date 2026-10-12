@@ -7,7 +7,7 @@ import {
   TextLayer,
 } from 'pdfjs-dist'
 import { openPdf } from '../lib/pdf.js'
-import { captureSelection, commentAtPoint, pdfRectToViewport } from '../lib/selection.js'
+import { alignLineRects, captureSelection, commentAtPoint, pdfRectToViewport } from '../lib/selection.js'
 
 const props = defineProps({
   src: { type: [String, Uint8Array], required: true },
@@ -73,7 +73,7 @@ function highlightRects(pageNumber) {
   for (const comment of props.comments) {
     for (const anchor of comment.anchors) {
       if (anchor.page !== pageNumber) continue
-      anchor.rects.forEach((rect, index) => {
+      alignLineRects(anchor.rects).forEach((rect, index) => {
         items.push({
           key: `${comment.id}-${index}`,
           id: comment.id,

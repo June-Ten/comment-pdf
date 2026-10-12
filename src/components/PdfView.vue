@@ -98,7 +98,9 @@ async function renderPagesNow(job) {
   if (job !== renderJob) return
   if (scaleMode.value === 'fit') {
     const base = firstPage.getViewport({ scale: PixelsPerInch.PDF_TO_CSS_UNITS })
-    const available = Math.max(240, scroller.value.clientWidth - 32)
+    const style = getComputedStyle(scroller.value)
+    const gutter = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight)
+    const available = Math.max(240, scroller.value.clientWidth - gutter)
     userScale.value = Math.min(3, Math.max(0.5, available / base.width))
   }
 

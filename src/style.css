@@ -119,13 +119,21 @@ textarea {
 }
 
 .highlights rect {
+  fill: none;
+}
+
+.highlights line {
+  stroke: #e6a100;
+  stroke-width: 2;
+}
+
+.highlights .active rect {
   fill: rgb(255 214 0 / 45%);
 }
 
-.highlights rect.active {
-  fill: rgb(255 160 0 / 55%);
+.highlights .active line {
   stroke: #d86b00;
-  stroke-width: 1.5;
+  stroke-width: 2;
 }
 
 .textLayer {

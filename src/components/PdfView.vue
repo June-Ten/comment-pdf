@@ -285,16 +285,20 @@ onBeforeUnmount(() => {
         <article v-for="number in pageNumbers" :key="number" class="pdf-page" :data-page="number">
           <div class="canvas-wrap"><canvas></canvas></div>
           <svg class="highlights" :viewBox="viewBox(number)">
-            <rect
+            <g
               v-for="box in highlightRects(number)"
               :key="box.key"
               :data-comment="box.id"
               :class="{ active: box.active }"
-              :x="box.x"
-              :y="box.y"
-              :width="box.width"
-              :height="box.height"
-            />
+            >
+              <rect :x="box.x" :y="box.y" :width="box.width" :height="box.height" />
+              <line
+                :x1="box.x"
+                :x2="box.x + box.width"
+                :y1="box.y + box.height"
+                :y2="box.y + box.height"
+              />
+            </g>
           </svg>
           <div class="textLayer"></div>
         </article>

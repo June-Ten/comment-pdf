@@ -14,9 +14,10 @@ body {
 #app {
   display: flex;
   box-sizing: border-box;
+  justify-content: center;
   min-width: 0;
   gap: 16px;
-  padding: 16px 28px;
+  padding: 28px 40px;
 }
 
 button,
@@ -26,7 +27,8 @@ textarea {
 
 .viewer-column {
   position: relative;
-  flex: 1;
+  flex: 0 1 860px;
+  width: min(860px, 100%);
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -106,7 +108,7 @@ textarea {
 .scroller {
   flex: 1;
   overflow: auto;
-  padding: 28px clamp(48px, 9vw, 120px) 40px;
+  padding: 24px 40px 36px;
 }
 
 .status {

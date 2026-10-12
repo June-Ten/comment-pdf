@@ -8,13 +8,13 @@ GlobalWorkerOptions.workerSrc = workerUrl
 
 const assetBase = import.meta.env.BASE_URL
 
-export function openPdf(url) {
+export function openPdf(source) {
   return getDocument({
-    url,
+    ...(typeof source === 'string' ? { url: source } : { data: source }),
     cMapUrl: `${assetBase}pdfjs/cmaps/`,
     cMapPacked: true,
     standardFontDataUrl: `${assetBase}pdfjs/standard_fonts/`,
     wasmUrl: `${assetBase}pdfjs/wasm/`,
     iccUrl: `${assetBase}pdfjs/iccs/`,
-  }).promise
+  })
 }

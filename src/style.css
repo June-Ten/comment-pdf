@@ -67,6 +67,42 @@ textarea {
   background: #f4f4f4;
 }
 
+.file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #444;
+  font-size: 13px;
+}
+
+.file-error {
+  flex: none;
+  color: #b42318;
+  font-size: 13px;
+}
+
+.file-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+  flex: none;
+}
+
+.file-input {
+  display: none;
+}
+
+.zoom-bar button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.zoom-bar button:disabled:hover {
+  background: #fff;
+}
+
 .scroller {
   flex: 1;
   overflow: auto;

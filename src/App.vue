@@ -4,12 +4,44 @@ import CommentPanel from './components/CommentPanel.vue'
 import PdfView from './components/PdfView.vue'
 import { loadComments, saveComments } from './lib/comments.js'
 
-const docId = `${import.meta.env.BASE_URL}pdf格式测试文件.pdf`
-const comments = ref(loadComments(docId))
+const defaultSrc = `${import.meta.env.BASE_URL}pdf格式测试文件.pdf`
+const defaultName = 'pdf格式测试文件.pdf'
+
+const src = ref(defaultSrc)
+const docId = ref(defaultSrc)
+const fileName = ref(defaultName)
+const fileError = ref('')
+const comments = ref(loadComments(docId.value))
 const activeId = ref(null)
 const focusNonce = ref(0)
 
-watch(comments, (value) => saveComments(docId, value), { deep: true })
+watch(comments, (value) => saveComments(docId.value, value), { deep: true })
+
+function showDocument(nextSrc, nextId, nextName) {
+  src.value = nextSrc
+  docId.value = nextId
+  fileName.value = nextName
+  comments.value = loadComments(nextId)
+  activeId.value = null
+  focusNonce.value = 0
+}
+
+async function openFile(file) {
+  const looksPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+  if (!looksPdf) {
+    fileError.value = '请选择 PDF 文件'
+    return
+  }
+  fileError.value = ''
+  const data = new Uint8Array(await file.arrayBuffer())
+  showDocument(data, `file:${file.name}:${file.size}:${file.lastModified}`, file.name)
+}
+
+function restoreDefault() {
+  if (src.value === defaultSrc) return
+  fileError.value = ''
+  showDocument(defaultSrc, defaultSrc, defaultName)
+}
 
 function addComment(draft) {
   const comment = {
@@ -38,11 +70,16 @@ function selectComment(id) {
 
 <template>
   <PdfView
-    :src="docId"
+    :src="src"
+    :file-name="fileName"
+    :file-error="fileError"
+    :can-restore="src !== defaultSrc"
     :comments="comments"
     :active-id="activeId"
     :focus-nonce="focusNonce"
     @create="addComment"
+    @open-file="openFile"
+    @restore="restoreDefault"
     @select="selectComment"
   />
   <CommentPanel

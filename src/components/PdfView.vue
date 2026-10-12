@@ -10,13 +10,24 @@ import { openPdf } from '../lib/pdf.js'
 import { captureSelection, commentAtPoint, pdfRectToViewport } from '../lib/selection.js'
 
 const props = defineProps({
-  src: { type: String, required: true },
+  src: { type: [String, Uint8Array], required: true },
+  fileName: { type: String, required: true },
+  fileError: { type: String, default: '' },
+  canRestore: { type: Boolean, default: false },
   comments: { type: Array, required: true },
   activeId: { type: String, default: null },
   focusNonce: { type: Number, default: 0 },
 })
 
-const emit = defineEmits(['create', 'select'])
+const emit = defineEmits(['create', 'select', 'open-file', 'restore'])
+
+const fileInput = ref(null)
+
+function onFileChange(event) {
+  const file = event.target.files?.[0]
+  event.target.value = ''
+  if (file) emit('open-file', file)
+}
 
 const scroller = ref(null)
 const pagesRoot = ref(null)
@@ -140,7 +151,7 @@ async function renderPagesNow(job) {
     textEl.replaceChildren()
     const textLayer = new TextLayer({
       textContentSource: page.streamTextContent({
-        includeMarkedContent: true,
+        includeMarkedContent: false,
         disableNormalization: true,
       }),
       container: textEl,
@@ -244,26 +255,64 @@ watch(draft, (value) => {
   requestAnimationFrame(() => draftInput.value?.focus())
 })
 
-onMounted(async () => {
-  window.addEventListener('keydown', onKeyDown)
+let loadToken = 0
+let loadingTask = null
+
+async function loadDocument() {
+  const token = ++loadToken
+  renderJob += 1
+  draft.value = null
+  draftBody.value = ''
+  document.getSelection()?.removeAllRanges()
+  status.value = '正在打开 PDF'
+  pageNumbers.value = []
+  pageMetrics.value = {}
+  viewportMap.clear()
+  scaleMode.value = 'fit'
+  renderedOnce = false
+  const previous = pdf
+  pdf = null
+  try { previous?.destroy() } catch { /* 文档可能已经销毁 */ }
+  try { loadingTask?.destroy() } catch { /* 打开任务可能已经结束 */ }
+  if (scroller.value) scroller.value.scrollTop = 0
+
   try {
-    pdf = await openPdf(props.src)
+    loadingTask = openPdf(props.src)
+    const next = await loadingTask.promise
+    if (token !== loadToken) {
+      next.destroy()
+      return
+    }
+    pdf = next
     pageNumbers.value = Array.from({ length: pdf.numPages }, (_, index) => index + 1)
     status.value = '正在渲染'
     await new Promise((resolve) => requestAnimationFrame(resolve))
+    if (token !== loadToken) return
     await renderPages()
-    scroller.value?.addEventListener('scroll', () => {
-      if (document.activeElement !== draftInput.value) draft.value = null
-    }, { passive: true })
-    resizeObserver = new ResizeObserver(onResize)
-    resizeObserver.observe(scroller.value)
   } catch (error) {
+    if (token !== loadToken) return
     status.value = error?.message || '无法打开 PDF'
   }
+}
+
+watch(() => props.src, () => {
+  loadDocument()
+})
+
+onMounted(async () => {
+  window.addEventListener('keydown', onKeyDown)
+  scroller.value?.addEventListener('scroll', () => {
+    if (document.activeElement !== draftInput.value) draft.value = null
+  }, { passive: true })
+  resizeObserver = new ResizeObserver(onResize)
+  resizeObserver.observe(scroller.value)
+  await loadDocument()
 })
 
 onBeforeUnmount(() => {
+  loadToken += 1
   renderJob += 1
+  loadingTask?.destroy()
   resizeObserver?.disconnect()
   window.removeEventListener('keydown', onKeyDown)
   window.clearTimeout(resizeTimer)
@@ -278,6 +327,19 @@ onBeforeUnmount(() => {
       <span>{{ percentLabel }}</span>
       <button type="button" @click="zoomBy(1.1)">放大</button>
       <button type="button" @click="fitWidth">适应宽度</button>
+      <span class="file-name" :title="fileName">{{ fileName }}</span>
+      <span v-if="fileError" class="file-error">{{ fileError }}</span>
+      <div class="file-actions">
+        <input
+          ref="fileInput"
+          class="file-input"
+          type="file"
+          accept="application/pdf,.pdf"
+          @change="onFileChange"
+        >
+        <button type="button" @click="fileInput?.click()">上传 PDF</button>
+        <button type="button" :disabled="!canRestore" @click="emit('restore')">恢复默认</button>
+      </div>
     </div>
     <div ref="scroller" class="scroller" @pointerdown="onPointerDown" @pointerup="onPointerUp">
       <p v-if="status" class="status">{{ status }}</p>

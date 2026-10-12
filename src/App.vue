@@ -14,6 +14,10 @@ const fileError = ref('')
 const comments = ref(loadComments(docId.value))
 const activeId = ref(null)
 const focusNonce = ref(0)
+const query = ref('')
+const matches = ref([])
+const matchIndex = ref(0)
+const matchFocus = ref(0)
 
 watch(comments, (value) => saveComments(docId.value, value), { deep: true })
 
@@ -24,6 +28,9 @@ function showDocument(nextSrc, nextId, nextName) {
   comments.value = loadComments(nextId)
   activeId.value = null
   focusNonce.value = 0
+  query.value = ''
+  matches.value = []
+  matchIndex.value = 0
 }
 
 async function openFile(file) {
@@ -66,6 +73,23 @@ function selectComment(id) {
   activeId.value = id
   focusNonce.value += 1
 }
+
+function setMatches(list) {
+  matches.value = list
+  if (matchIndex.value >= list.length) matchIndex.value = 0
+  if (list.length) matchFocus.value += 1
+}
+
+function stepMatch(delta) {
+  if (!matches.value.length) return
+  matchIndex.value = (matchIndex.value + delta + matches.value.length) % matches.value.length
+  matchFocus.value += 1
+}
+
+function chooseMatch(index) {
+  matchIndex.value = index
+  matchFocus.value += 1
+}
 </script>
 
 <template>
@@ -77,14 +101,25 @@ function selectComment(id) {
     :comments="comments"
     :active-id="activeId"
     :focus-nonce="focusNonce"
+    :query="query"
+    :matches="matches"
+    :match-index="matchIndex"
+    :match-focus="matchFocus"
     @create="addComment"
     @open-file="openFile"
     @restore="restoreDefault"
     @select="selectComment"
+    @matches="setMatches"
   />
   <CommentPanel
     :comments="comments"
     :active-id="activeId"
+    :query="query"
+    :matches="matches"
+    :match-index="matchIndex"
+    @search="query = $event"
+    @step="stepMatch"
+    @choose="chooseMatch"
     @select="selectComment"
     @remove="removeComment"
   />

@@ -102,17 +102,7 @@ function contextFromRange(range, textLayer) {
   }
 }
 
-export function captureSelection(root, viewportFor) {
-  const selection = document.getSelection()
-  if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return null
-
-  const quote = selection.toString().replace(/\s+/g, ' ').trim()
-  if (!quote) return null
-
-  const range = selection.getRangeAt(0)
-  const start = elementOf(range.startContainer)
-  if (!start || !root.contains(start) || !start.closest('.textLayer')) return null
-
+export function anchorsFromRange(range, root, viewportFor) {
   const groups = new Map()
   let lastRect = null
   for (const rect of range.getClientRects()) {
@@ -130,12 +120,26 @@ export function captureSelection(root, viewportFor) {
     groups.get(page).push(pdfRect)
     lastRect = rect
   }
-
-  if (groups.size === 0 || !lastRect) return null
-
+  if (groups.size === 0) return { anchors: [], lastRect: null }
   const anchors = [...groups.entries()]
     .sort((a, b) => a[0] - b[0])
     .map(([page, rects]) => ({ page, rects: alignLineRects(dedupeRects(rects)) }))
+  return { anchors, lastRect }
+}
+
+export function captureSelection(root, viewportFor) {
+  const selection = document.getSelection()
+  if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return null
+
+  const quote = selection.toString().replace(/\s+/g, ' ').trim()
+  if (!quote) return null
+
+  const range = selection.getRangeAt(0)
+  const start = elementOf(range.startContainer)
+  if (!start || !root.contains(start) || !start.closest('.textLayer')) return null
+
+  const { anchors, lastRect } = anchorsFromRange(range, root, viewportFor)
+  if (!anchors.length || !lastRect) return null
   const firstPage = root.querySelector(`[data-page="${anchors[0].page}"]`)
   const { prefix, suffix } = contextFromRange(range, firstPage?.querySelector('.textLayer'))
 

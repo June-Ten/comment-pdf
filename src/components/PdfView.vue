@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   PixelsPerInch,
   RenderingCancelledException,
@@ -7,6 +7,7 @@ import {
   TextLayer,
 } from 'pdfjs-dist'
 import { openPdf } from '../lib/pdf.js'
+import { findMatches } from '../lib/search.js'
 import { alignLineRects, captureSelection, commentAtPoint, pdfRectToViewport } from '../lib/selection.js'
 
 const props = defineProps({
@@ -17,9 +18,13 @@ const props = defineProps({
   comments: { type: Array, required: true },
   activeId: { type: String, default: null },
   focusNonce: { type: Number, default: 0 },
+  query: { type: String, default: '' },
+  matches: { type: Array, default: () => [] },
+  matchIndex: { type: Number, default: 0 },
+  matchFocus: { type: Number, default: 0 },
 })
 
-const emit = defineEmits(['create', 'select', 'open-file', 'restore'])
+const emit = defineEmits(['create', 'select', 'open-file', 'restore', 'matches'])
 
 const fileInput = ref(null)
 
@@ -66,6 +71,20 @@ function viewportFor(pageNumber) {
   return viewportMap.get(pageNumber)
 }
 
+function appendHighlight(items, source, kind) {
+  const viewport = viewportMap.get(source.page)
+  if (!viewport) return
+  alignLineRects(source.rects).forEach((rect, index) => {
+    items.push({
+      key: `${kind}-${source.id}-${index}`,
+      id: source.id,
+      kind,
+      active: source.active,
+      ...pdfRectToViewport(rect, viewport),
+    })
+  })
+}
+
 function highlightRects(pageNumber) {
   const viewport = viewportMap.get(pageNumber)
   if (!viewport || !pageMetrics.value[pageNumber]) return []
@@ -73,16 +92,25 @@ function highlightRects(pageNumber) {
   for (const comment of props.comments) {
     for (const anchor of comment.anchors) {
       if (anchor.page !== pageNumber) continue
-      alignLineRects(anchor.rects).forEach((rect, index) => {
-        items.push({
-          key: `${comment.id}-${index}`,
-          id: comment.id,
-          active: comment.id === props.activeId,
-          ...pdfRectToViewport(rect, viewport),
-        })
-      })
+      appendHighlight(items, {
+        page: pageNumber,
+        rects: anchor.rects,
+        id: comment.id,
+        active: comment.id === props.activeId,
+      }, 'comment')
     }
   }
+  props.matches.forEach((match, index) => {
+    for (const anchor of match.anchors) {
+      if (anchor.page !== pageNumber) continue
+      appendHighlight(items, {
+        page: pageNumber,
+        rects: anchor.rects,
+        id: String(index),
+        active: index === props.matchIndex,
+      }, 'match')
+    }
+  })
   return items
 }
 
@@ -250,6 +278,21 @@ watch(
   },
 )
 
+watch([() => props.query, pageMetrics], () => {
+  if (!pagesRoot.value) return
+  emit('matches', findMatches(pagesRoot.value, viewportFor, props.query))
+})
+
+watch(
+  () => props.matchFocus,
+  async () => {
+    if (!props.matches.length) return
+    await nextTick()
+    const target = pagesRoot.value?.querySelector(`[data-match="${props.matchIndex}"]`)
+    target?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  },
+)
+
 watch(draft, (value) => {
   if (!value) return
   requestAnimationFrame(() => draftInput.value?.focus())
@@ -350,8 +393,9 @@ onBeforeUnmount(() => {
             <g
               v-for="box in highlightRects(number)"
               :key="box.key"
-              :data-comment="box.id"
-              :class="{ active: box.active }"
+              :data-comment="box.kind === 'comment' ? box.id : undefined"
+              :data-match="box.kind === 'match' ? box.id : undefined"
+              :class="[box.kind, { active: box.active }]"
             >
               <rect :x="box.x" :y="box.y" :width="box.width" :height="box.height" />
               <line

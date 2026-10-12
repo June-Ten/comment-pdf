@@ -4,7 +4,7 @@ import CommentPanel from './components/CommentPanel.vue'
 import PdfView from './components/PdfView.vue'
 import { loadComments, saveComments } from './lib/comments.js'
 
-const docId = '/pdf格式测试文件.pdf'
+const docId = `${import.meta.env.BASE_URL}pdf格式测试文件.pdf`
 const comments = ref(loadComments(docId))
 const activeId = ref(null)
 const focusNonce = ref(0)

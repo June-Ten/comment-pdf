@@ -8,3 +8,5 @@ npm run dev
 ```
 
 打开页面后会预览 `public/pdf格式测试文件.pdf`。
+
+推送到 `main` 后，GitHub Actions 会把页面发布到 <https://june-ten.github.io/comment-pdf/>。

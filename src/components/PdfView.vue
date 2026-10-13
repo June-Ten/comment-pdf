@@ -100,6 +100,17 @@ function highlightRects(pageNumber) {
       }, 'comment')
     }
   }
+  if (draft.value) {
+    for (const anchor of draft.value.anchors) {
+      if (anchor.page !== pageNumber) continue
+      appendHighlight(items, {
+        page: pageNumber,
+        rects: anchor.rects,
+        id: 'draft',
+        active: true,
+      }, 'comment')
+    }
+  }
   props.matches.forEach((match, index) => {
     for (const anchor of match.anchors) {
       if (anchor.page !== pageNumber) continue
@@ -229,6 +240,7 @@ function onPointerUp(event) {
     if (captured) {
       draft.value = captured
       draftBody.value = ''
+      document.getSelection()?.removeAllRanges()
       return
     }
     if (document.activeElement?.closest('.composer')) return

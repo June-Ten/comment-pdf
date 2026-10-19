@@ -394,6 +394,7 @@ onBeforeUnmount(() => {
       <span>{{ percentLabel }}</span>
       <button type="button" @click="zoomBy(1.1)">放大</button>
       <button type="button" @click="fitWidth">适应宽度</button>
+      <router-link to="/mupdf">MuPDF 预览</router-link>
       <span class="file-name" :title="fileName">{{ fileName }}</span>
       <span v-if="fileError" class="file-error">{{ fileError }}</span>
       <div class="file-actions">

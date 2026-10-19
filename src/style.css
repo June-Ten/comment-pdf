@@ -54,6 +54,7 @@ textarea {
 }
 
 .zoom-bar button,
+.zoom-bar a,
 .composer-actions button,
 .remove {
   border: 1px solid #d0d0d0;
@@ -64,6 +65,7 @@ textarea {
 }
 
 .zoom-bar button:hover,
+.zoom-bar a:hover,
 .composer-actions button:hover,
 .remove:hover {
   background: #f4f4f4;
@@ -131,6 +133,52 @@ textarea {
   box-shadow: 0 1px 4px rgb(0 0 0 / 16%);
 }
 
+.mupdf-view {
+  user-select: text;
+}
+
+.zoom-bar a {
+  color: inherit;
+  text-decoration: none;
+  flex: none;
+}
+
+.mupdf-page {
+  position: relative;
+  margin: 12px auto;
+  background: #fff;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 16%);
+  overflow: hidden;
+}
+
+.mupdf-html {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+}
+
+.mupdf-html > div {
+  position: relative;
+}
+
+.mupdf-html :is(p, img, .mupdf-vector) {
+  position: absolute;
+  margin: 0;
+}
+
+.mupdf-html .mupdf-vector {
+  pointer-events: none;
+}
+
+.mupdf-html p {
+  white-space: pre;
+}
+
+.mupdf-html ::selection {
+  background: rgb(0 90 255 / 35%);
+}
+
 .canvas-wrap,
 .highlights,
 .textLayer {
@@ -141,6 +189,7 @@ textarea {
 .canvas-wrap {
   overflow: hidden;
   z-index: 0;
+  visibility: hidden;
 }
 
 .canvas-wrap canvas {
@@ -154,6 +203,7 @@ textarea {
   width: 100%;
   height: 100%;
   pointer-events: none;
+  visibility: hidden;
 }
 
 .highlights rect {
@@ -190,7 +240,7 @@ textarea {
 }
 
 .textLayer :is(span, br) {
-  color: transparent;
+  color: #1a1a1a;
   position: absolute;
   white-space: pre;
   cursor: text;

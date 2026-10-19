@@ -59,6 +59,9 @@ export default defineConfig({
     vue(),
     pdfjsAssets(),
   ],
+  optimizeDeps: {
+    exclude: ['mupdf'],
+  },
   server: {
     host: '127.0.0.1',
     port: 5173,

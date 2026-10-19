@@ -7,7 +7,7 @@ import {
   TextLayer,
 } from 'pdfjs-dist'
 import { openPdf } from '../lib/pdf.js'
-import { findMatches } from '../lib/search.js'
+import { locateComments } from '../lib/search.js'
 import { alignLineRects, captureSelection, commentAtPoint, pdfRectToViewport } from '../lib/selection.js'
 
 const props = defineProps({
@@ -17,14 +17,11 @@ const props = defineProps({
   canRestore: { type: Boolean, default: false },
   comments: { type: Array, required: true },
   activeId: { type: String, default: null },
+  commentIndex: { type: Object, default: () => ({}) },
   focusNonce: { type: Number, default: 0 },
-  query: { type: String, default: '' },
-  matches: { type: Array, default: () => [] },
-  matchIndex: { type: Number, default: 0 },
-  matchFocus: { type: Number, default: 0 },
 })
 
-const emit = defineEmits(['create', 'select', 'open-file', 'restore', 'matches'])
+const emit = defineEmits(['create', 'select', 'open-file', 'restore', 'located'])
 
 const fileInput = ref(null)
 
@@ -38,6 +35,7 @@ const scroller = ref(null)
 const pagesRoot = ref(null)
 const pageNumbers = ref([])
 const pageMetrics = ref({})
+const commentLocated = ref({})
 const userScale = ref(1)
 const scaleMode = ref('fit')
 const status = ref('正在打开 PDF')
@@ -71,14 +69,21 @@ function viewportFor(pageNumber) {
   return viewportMap.get(pageNumber)
 }
 
-function appendHighlight(items, source, kind) {
+function currentMatchIndex(commentId, total, preferredIndex = 0) {
+  if (!total) return 0
+  const saved = props.commentIndex[commentId]
+  const raw = typeof saved === 'number' ? saved : preferredIndex
+  return ((raw % total) + total) % total
+}
+
+function appendHighlight(items, source) {
   const viewport = viewportMap.get(source.page)
   if (!viewport) return
   alignLineRects(source.rects).forEach((rect, index) => {
     items.push({
-      key: `${kind}-${source.id}-${index}`,
+      key: `${source.key}-${index}`,
       id: source.id,
-      kind,
+      matchKey: source.matchKey,
       active: source.active,
       ...pdfRectToViewport(rect, viewport),
     })
@@ -90,38 +95,36 @@ function highlightRects(pageNumber) {
   if (!viewport || !pageMetrics.value[pageNumber]) return []
   const items = []
   for (const comment of props.comments) {
-    for (const anchor of comment.anchors) {
-      if (anchor.page !== pageNumber) continue
-      appendHighlight(items, {
-        page: pageNumber,
-        rects: anchor.rects,
-        id: comment.id,
-        active: comment.id === props.activeId,
-      }, 'comment')
-    }
+    const info = commentLocated.value[comment.id]
+    const matches = info?.matches || []
+    const selectedIdx = currentMatchIndex(comment.id, matches.length, info?.preferredIndex)
+    matches.forEach((match, matchIdx) => {
+      for (const anchor of match.anchors) {
+        if (anchor.page !== pageNumber) continue
+        appendHighlight(items, {
+          key: `comment-${comment.id}-${matchIdx}`,
+          page: pageNumber,
+          rects: anchor.rects,
+          id: comment.id,
+          matchKey: `${comment.id}:${matchIdx}`,
+          active: comment.id === props.activeId && matchIdx === selectedIdx,
+        })
+      }
+    })
   }
   if (draft.value) {
     for (const anchor of draft.value.anchors) {
       if (anchor.page !== pageNumber) continue
       appendHighlight(items, {
+        key: 'comment-draft',
         page: pageNumber,
         rects: anchor.rects,
         id: 'draft',
+        matchKey: 'draft:0',
         active: true,
-      }, 'comment')
+      })
     }
   }
-  props.matches.forEach((match, index) => {
-    for (const anchor of match.anchors) {
-      if (anchor.page !== pageNumber) continue
-      appendHighlight(items, {
-        page: pageNumber,
-        rects: anchor.rects,
-        id: String(index),
-        active: index === props.matchIndex,
-      }, 'match')
-    }
-  })
   return items
 }
 
@@ -244,7 +247,7 @@ function onPointerUp(event) {
       return
     }
     if (document.activeElement?.closest('.composer')) return
-    const hit = commentAtPoint(point.x, point.y, pagesRoot.value, viewportFor, props.comments)
+    const hit = commentAtPoint(point.x, point.y, pagesRoot.value, viewportFor, props.comments, commentLocated.value)
     draft.value = null
     if (hit) emit('select', hit)
   })
@@ -257,7 +260,6 @@ function submitDraft() {
     quote: draft.value.quote,
     prefix: draft.value.prefix,
     suffix: draft.value.suffix,
-    anchors: draft.value.anchors,
     body,
   })
   draft.value = null
@@ -283,27 +285,36 @@ function onResize() {
 
 watch(
   () => props.focusNonce,
-  () => {
-    if (!props.activeId) return
-    const target = pagesRoot.value?.querySelector(`[data-comment="${props.activeId}"]`)
-    target?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-  },
-)
-
-watch([() => props.query, pageMetrics], () => {
-  if (!pagesRoot.value) return
-  emit('matches', findMatches(pagesRoot.value, viewportFor, props.query))
-})
-
-watch(
-  () => props.matchFocus,
   async () => {
-    if (!props.matches.length) return
+    if (!props.activeId) return
     await nextTick()
-    const target = pagesRoot.value?.querySelector(`[data-match="${props.matchIndex}"]`)
+    const info = commentLocated.value[props.activeId]
+    const matches = info?.matches || []
+    const idx = currentMatchIndex(props.activeId, matches.length, info?.preferredIndex)
+    const target =
+      pagesRoot.value?.querySelector(`[data-comment-match="${props.activeId}:${idx}"]`) ||
+      pagesRoot.value?.querySelector(`[data-comment="${props.activeId}"]`)
     target?.scrollIntoView({ block: 'center', behavior: 'smooth' })
   },
 )
+
+watch([() => props.comments, pageMetrics], () => {
+  if (!pagesRoot.value || !Object.keys(pageMetrics.value).length) {
+    commentLocated.value = {}
+    emit('located', {})
+    return
+  }
+  const map = locateComments(pagesRoot.value, viewportFor, props.comments)
+  commentLocated.value = map
+  const summary = {}
+  for (const [id, info] of Object.entries(map)) {
+    summary[id] = {
+      pages: info.matches.map((item) => item.pages || [item.page]),
+      preferredIndex: info.preferredIndex,
+    }
+  }
+  emit('located', summary)
+}, { deep: true })
 
 watch(draft, (value) => {
   if (!value) return
@@ -322,6 +333,7 @@ async function loadDocument() {
   status.value = '正在打开 PDF'
   pageNumbers.value = []
   pageMetrics.value = {}
+  commentLocated.value = {}
   viewportMap.clear()
   scaleMode.value = 'fit'
   renderedOnce = false
@@ -405,9 +417,9 @@ onBeforeUnmount(() => {
             <g
               v-for="box in highlightRects(number)"
               :key="box.key"
-              :data-comment="box.kind === 'comment' ? box.id : undefined"
-              :data-match="box.kind === 'match' ? box.id : undefined"
-              :class="[box.kind, { active: box.active }]"
+              :data-comment="box.id"
+              :data-comment-match="box.matchKey"
+              :class="['comment', { active: box.active }]"
             >
               <rect :x="box.x" :y="box.y" :width="box.width" :height="box.height" />
               <line

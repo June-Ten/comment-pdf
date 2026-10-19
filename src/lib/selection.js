@@ -85,9 +85,9 @@ function dedupeRects(rects) {
   return kept
 }
 
-function contextFromRange(range, textLayer) {
-  if (!textLayer) return { prefix: '', suffix: '' }
-  const spans = [...textLayer.querySelectorAll('span')].filter((span) => !span.querySelector('span'))
+function contextFromRange(range, root) {
+  if (!root) return { prefix: '', suffix: '' }
+  const spans = [...root.querySelectorAll('.textLayer span')].filter((span) => !span.querySelector('span'))
   const startSpan = elementOf(range.startContainer)?.closest('span')
   const endSpan = elementOf(range.endContainer)?.closest('span')
   const startIdx = spans.indexOf(startSpan)
@@ -140,8 +140,7 @@ export function captureSelection(root, viewportFor) {
 
   const { anchors, lastRect } = anchorsFromRange(range, root, viewportFor)
   if (!anchors.length || !lastRect) return null
-  const firstPage = root.querySelector(`[data-page="${anchors[0].page}"]`)
-  const { prefix, suffix } = contextFromRange(range, firstPage?.querySelector('.textLayer'))
+  const { prefix, suffix } = contextFromRange(range, root)
 
   return {
     quote,
@@ -157,7 +156,7 @@ export function captureSelection(root, viewportFor) {
   }
 }
 
-export function commentAtPoint(clientX, clientY, root, viewportFor, comments) {
+export function commentAtPoint(clientX, clientY, root, viewportFor, comments, locatedByComment) {
   const pageEl = pageAt(
     { left: clientX, top: clientY, width: 0, height: 0, right: clientX, bottom: clientY },
     root,
@@ -171,11 +170,14 @@ export function commentAtPoint(clientX, clientY, root, viewportFor, comments) {
 
   for (let index = comments.length - 1; index >= 0; index -= 1) {
     const comment = comments[index]
-    for (const anchor of comment.anchors) {
-      if (anchor.page !== page) continue
-      for (const rect of anchor.rects) {
-        if (x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height) {
-          return comment.id
+    const matches = locatedByComment?.[comment.id]?.matches || []
+    for (let matchIndex = 0; matchIndex < matches.length; matchIndex += 1) {
+      for (const anchor of matches[matchIndex].anchors) {
+        if (anchor.page !== page) continue
+        for (const rect of anchor.rects) {
+          if (x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height) {
+            return { id: comment.id, matchIndex }
+          }
         }
       }
     }

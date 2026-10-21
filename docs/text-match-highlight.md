@@ -1,5 +1,7 @@
 # 按文字匹配定位并高亮（无坐标模式）
 
+> 本文描述的是重构前的实现（在 DOM 文字层上查找）。当前架构见 [architecture.md](architecture.md)。
+
 原方案见 [selection-highlight.md](selection-highlight.md)，那份方案在松手时把选区换成 PDF 坐标存下来。
 
 这份文档说明改造后的做法：**后端或 AI 只返回违规原句，给不出坐标；前端只存文字，每次在文字层渲染完成后反查这些句子在页面里的位置，再算出矩形并画高亮。**
@@ -141,28 +143,9 @@ AI 导入的违规句没有 `prefix` / `suffix`，`preferredIndex` 固定是 `0`
 
 `App.vue` 用 `commentIndex`（形如 `{ [commentId]: 当前序号 }`）记录每条评论当前看的是第几处。收到 `located` 事件时，如果某条评论还没有序号，或者原来的序号越界了，就初始化成 `preferredIndex`。
 
-`PdfView.vue` 的 `highlightRects(pageNumber)` 画这一页的 SVG：
+`PdfView.vue` 的 `highlightsByPage` 是一个 `computed`，一次遍历所有评论，把矩形按页分组成 `Map<页码, 高亮项[]>`，模板里每页只取自己那一组。它只依赖评论、定位结果、`activeId`、`commentIndex`、草稿和 `pageMetrics`；在评论框里打字不会触发重算。当前选中的那一处放在最后画，底色不会被别的评论压住。
 
-```js
-  for (const comment of props.comments) {
-    const info = commentLocated.value[comment.id]
-    const matches = info?.matches || []
-    const selectedIdx = currentMatchIndex(comment.id, matches.length, info?.preferredIndex)
-    matches.forEach((match, matchIdx) => {
-      for (const anchor of match.anchors) {
-        if (anchor.page !== pageNumber) continue
-        appendHighlight(items, {
-          key: `comment-${comment.id}-${matchIdx}`,
-          page: pageNumber,
-          rects: anchor.rects,
-          id: comment.id,
-          matchKey: `${comment.id}:${matchIdx}`,
-          active: comment.id === props.activeId && matchIdx === selectedIdx,
-        })
-      }
-    })
-  }
-```
+定位结果按 `quote + prefix + suffix` 缓存，缓存跟着这一轮渲染的 `pageMetrics` 走：缩放、换文档后整表作废；只是新增或删除评论时，旧评论直接复用，只为新评论建一次全文索引并查找。
 
 这里有两个细节：
 
@@ -207,7 +190,7 @@ target?.scrollIntoView({ block: 'center', behavior: 'smooth' })
 | --- | --- |
 | 全文档索引、跨页拆段、忽略空白匹配、前后文打分 | `src/lib/search.js` 的 `documentText`、`anchorsForHit`、`findSpansInDocument`、`contextScore`、`locateComments` |
 | `Range` 转 PDF 矩形、去重、同行合并、点击反查第几处 | `src/lib/selection.js` 的 `anchorsFromRange`、`commentAtPoint` |
-| 渲染后触发定位、按处画高亮、滚到指定处 | `src/components/PdfView.vue` 的 `highlightRects`、`watch([comments, pageMetrics])`、`watch(focusNonce)` |
+| 渲染后触发定位、按处画高亮、滚到指定处 | `src/components/PdfView.vue` 的 `highlightsByPage`、`watch([comments, pageMetrics])`、`watch(focusNonce)` |
 | 每条评论当前停在第几处、左右切换 | `src/App.vue` 的 `commentLocated`、`commentIndex`、`stepCommentMatch` |
 | 批量粘贴违规句、`‹ k / N ›` 按钮 | `src/components/CommentPanel.vue` 的 `submitStatements`、`.occurrence-nav` |
 | 只存文字、剥掉旧坐标 | `src/lib/comments.js` 的 `cleanComment` |

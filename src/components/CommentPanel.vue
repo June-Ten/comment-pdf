@@ -1,37 +1,32 @@
 <script setup>
 import { ref } from 'vue'
+import { useReviewStore } from '../core/store.js'
 
-const props = defineProps({
-  comments: { type: Array, required: true },
-  commentLocated: { type: Object, default: () => ({}) },
-  commentIndex: { type: Object, default: () => ({}) },
-  activeId: { type: String, default: null },
-})
-
-const emit = defineEmits(['select', 'remove', 'add-batch', 'step-match'])
+const store = useReviewStore()
 
 const rawStatements = ref('')
 const noteBody = ref('')
 
-function matchPages(comment) {
-  return props.commentLocated[comment.id]?.pages || []
+function matchesOf(annotation) {
+  return store.resolved.value.get(annotation.id)?.matches || []
 }
 
-function currentIndex(comment) {
-  const pages = matchPages(comment)
-  if (!pages.length) return 0
-  const raw = props.commentIndex[comment.id] ?? props.commentLocated[comment.id]?.preferredIndex ?? 0
-  return ((raw % pages.length) + pages.length) % pages.length
+function currentMatch(annotation) {
+  return matchesOf(annotation)[store.currentMatchIndex(annotation.id)]
 }
 
-function pageLabel(comment) {
-  const matches = matchPages(comment)
-  if (matches.length === 0) return '未匹配到正文'
-  const idx = currentIndex(comment)
-  const item = matches[idx]
-  const list = Array.isArray(item) ? item : [item]
-  if (list.length <= 1) return `第 ${list[0]} 页`
-  return `第 ${list[0]}–${list.at(-1)} 页`
+function pageLabel(annotation) {
+  const match = currentMatch(annotation)
+  if (!match) return '未匹配到正文'
+  const { pages } = match
+  return pages.length <= 1 ? `第 ${pages[0]} 页` : `第 ${pages[0]}–${pages.at(-1)} 页`
+}
+
+function confidenceLabel(annotation) {
+  const confidence = currentMatch(annotation)?.confidence
+  if (confidence === 'loose') return '忽略标点'
+  if (confidence === 'fuzzy') return '近似匹配'
+  return ''
 }
 
 function submitStatements() {
@@ -43,15 +38,15 @@ function submitStatements() {
   const defaultBody = noteBody.value.trim() || 'AI 检出违规语句'
   const items = lines.map((line) => {
     const sep = line.indexOf('｜') >= 0 ? '｜' : line.indexOf('|') >= 0 ? '|' : ''
-    if (!sep) return { quote: line, body: defaultBody }
-    const [quote, ...rest] = line.split(sep)
+    if (!sep) return { exact: line, body: defaultBody }
+    const [exact, ...rest] = line.split(sep)
     return {
-      quote: quote.trim(),
+      exact: exact.trim(),
       body: rest.join(sep).trim() || defaultBody,
     }
-  }).filter((item) => item.quote)
+  }).filter((item) => item.exact)
   if (!items.length) return
-  emit('add-batch', items)
+  store.addMany(items)
   rawStatements.value = ''
   noteBody.value = ''
 }
@@ -61,7 +56,7 @@ function submitStatements() {
   <aside class="comment-panel">
     <header>
       <h1>评论与违规项</h1>
-      <span>{{ comments.length }}</span>
+      <span>{{ store.state.annotations.length }}</span>
     </header>
     <form class="ai-importer" @submit.prevent="submitStatements">
       <textarea
@@ -79,41 +74,34 @@ function submitStatements() {
       </div>
     </form>
     <div class="panel-body">
-      <p v-if="comments.length === 0" class="empty">粘贴违规语句或直接划选正文。仅保存原句文字，每次按文字在页面中匹配位置并高亮。</p>
+      <p v-if="store.state.annotations.length === 0" class="empty">粘贴违规语句或直接划选正文。评论按原句文字定位，PDF 改动后仍会尽量找回位置。</p>
       <ol v-else class="comment-list">
         <li
-          v-for="comment in comments"
-          :key="comment.id"
+          v-for="annotation in store.state.annotations"
+          :key="annotation.id"
           class="comment-card"
-          :class="{ active: comment.id === activeId, unmatched: matchPages(comment).length === 0 }"
+          :class="{ active: annotation.id === store.state.activeId, unmatched: matchesOf(annotation).length === 0 }"
         >
           <div class="comment-top">
-            <span class="meta-badge" :class="{ warn: matchPages(comment).length === 0 }">
-              {{ pageLabel(comment) }}
+            <span class="meta-badge" :class="{ warn: matchesOf(annotation).length === 0 }">
+              {{ pageLabel(annotation) }}
             </span>
-            <div v-if="matchPages(comment).length > 1" class="occurrence-nav">
-              <button
-                type="button"
-                aria-label="上一处"
-                @click="emit('step-match', { id: comment.id, delta: -1 })"
-              >‹</button>
-              <span>{{ currentIndex(comment) + 1 }} / {{ matchPages(comment).length }}</span>
-              <button
-                type="button"
-                aria-label="下一处"
-                @click="emit('step-match', { id: comment.id, delta: 1 })"
-              >›</button>
+            <span v-if="confidenceLabel(annotation)" class="meta-badge approx">{{ confidenceLabel(annotation) }}</span>
+            <div v-if="matchesOf(annotation).length > 1" class="occurrence-nav">
+              <button type="button" aria-label="上一处" @click="store.step(annotation.id, -1)">‹</button>
+              <span>{{ store.currentMatchIndex(annotation.id) + 1 }} / {{ matchesOf(annotation).length }}</span>
+              <button type="button" aria-label="下一处" @click="store.step(annotation.id, 1)">›</button>
             </div>
-            <button type="button" class="remove" @click="emit('remove', comment.id)">删除</button>
+            <button type="button" class="remove" @click="store.remove(annotation.id)">删除</button>
           </div>
-          <button type="button" class="comment-main" @click="emit('select', comment.id)">
+          <button type="button" class="comment-main" @click="store.select(annotation.id)">
             <div class="field-row quote-row">
               <span class="field-tag quote-tag">原文</span>
-              <span class="quote">{{ comment.quote }}</span>
+              <span class="quote">{{ annotation.target.exact }}</span>
             </div>
             <div class="field-row body-row">
               <span class="field-tag body-tag">批注</span>
-              <span class="body">{{ comment.body }}</span>
+              <span class="body">{{ annotation.body }}</span>
             </div>
           </button>
         </li>

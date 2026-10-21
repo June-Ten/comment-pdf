@@ -163,6 +163,11 @@ textarea {
 .highlights line {
   stroke: #e6a100;
   stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.highlights .comment.approximate line {
+  stroke-dasharray: 4 3;
 }
 
 .highlights .comment.active rect {
@@ -171,7 +176,6 @@ textarea {
 
 .highlights .comment.active line {
   stroke: #d86b00;
-  stroke-width: 2;
 }
 
 .textLayer {
@@ -187,6 +191,18 @@ textarea {
   --min-font-size: 1;
   --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
   --min-font-size-inv: calc(1 / var(--min-font-size));
+}
+
+.textLayer[data-main-rotation='90'] {
+  transform: rotate(90deg) translateY(-100%);
+}
+
+.textLayer[data-main-rotation='180'] {
+  transform: rotate(180deg) translate(-100%, -100%);
+}
+
+.textLayer[data-main-rotation='270'] {
+  transform: rotate(270deg) translateX(-100%);
 }
 
 .textLayer :is(span, br) {
@@ -460,6 +476,11 @@ textarea {
 .meta-badge.warn {
   background: #fff1f0;
   color: #cf1322;
+}
+
+.meta-badge.approx {
+  background: #fff7e6;
+  color: #ad6800;
 }
 
 .occurrence-nav {
